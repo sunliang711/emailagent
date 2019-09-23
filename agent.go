@@ -41,12 +41,23 @@ type EmailAgent struct {
 }
 
 //NewEmailAgent TODO
-func NewEmailAgent(host string, port int, user, password string) *EmailAgent {
-	return &EmailAgent{host, port, user, password, nil}
+func NewEmailAgent(host string, port int, user, password string) (*EmailAgent, error) {
+	agent := &EmailAgent{
+		Host:     host,
+		Port:     port,
+		User:     user,
+		Password: password,
+		Client:   nil,
+	}
+	err := agent.init()
+	if err != nil {
+		return nil, err
+	}
+	return agent, nil
 }
 
-//Init TODO
-func (a *EmailAgent) Init() error {
+//init TODO
+func (a *EmailAgent) init() error {
 	auth := smtp.PlainAuth("", a.User, a.Password, a.Host)
 	tlsConfig := &tls.Config{
 		ServerName: a.Host,
