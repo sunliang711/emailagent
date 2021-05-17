@@ -9,9 +9,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	HTML_MIME = "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
+)
+
 // buildMessage TODO
 // 2019/09/23 21:53:09
-func buildMessage(from, to, subject, body string) string {
+func buildMessage(from, to, subject, body string, isHtml bool) string {
 	f := mail.Address{"", from}
 	t := mail.Address{"", to}
 
@@ -25,6 +29,9 @@ func buildMessage(from, to, subject, body string) string {
 	message := ""
 	for k, v := range headers {
 		message += fmt.Sprintf("%s: %s\r\n", k, v)
+	}
+	if isHtml {
+		message += HTML_MIME
 	}
 	message += "\r\n" + body
 	return message
@@ -122,7 +129,46 @@ func (a *EmailAgent) SendEmail(to, subject, body string) error {
 	defer w.Close()
 	log.Infof("Data OK.")
 
-	message := buildMessage(a.User, to, subject, body)
+	message := buildMessage(a.User, to, subject, body, false)
+	_, err = w.Write([]byte(message))
+	if err != nil {
+		log.Errorf("Write error: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (a *EmailAgent) SendHTMLEmail(to, subject, body string) error {
+	if a.Client == nil {
+		msg := fmt.Sprintf("EmailAgent must init!")
+		err := fmt.Errorf(msg)
+		log.Errorf(msg)
+		return err
+	}
+	log.Infof("Mail ...")
+	if err := a.Client.Mail(a.User); err != nil {
+		log.Errorf("Mail error: %v", err)
+		return err
+	}
+	log.Infof("Mail OK.")
+
+	log.Infof("Rctp ...")
+	if err := a.Client.Rcpt(to); err != nil {
+		log.Errorf("Rcpt error: %v", err)
+		return err
+	}
+	log.Infof("Rctp OK.")
+
+	log.Infof("Data ...")
+	w, err := a.Client.Data()
+	if err != nil {
+		log.Errorf("Data error: %v", err)
+		return err
+	}
+	defer w.Close()
+	log.Infof("Data OK.")
+
+	message := buildMessage(a.User, to, subject, body, true)
 	_, err = w.Write([]byte(message))
 	if err != nil {
 		log.Errorf("Write error: %v", err)
