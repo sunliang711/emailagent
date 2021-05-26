@@ -13,16 +13,21 @@ const (
 	HTML_MIME = "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
 )
 
-// buildMessage TODO
+// buildMessage
 // 2019/09/23 21:53:09
-func buildMessage(from, to, subject, body string, isHtml bool) string {
-	f := mail.Address{"", from}
-	t := mail.Address{"", to}
+func buildMessage(recipients []string, from, subject, body string, isHtml bool) string {
+	f := mail.Address{Address: from}
+
+	recipientsMsg := ""
+	for _, recipient := range recipients {
+		t := mail.Address{Address: recipient}
+		recipientsMsg += fmt.Sprintf("To: %s\r\n", t.String())
+	}
 
 	// Setup headers
 	headers := make(map[string]string)
 	headers["From"] = f.String()
-	headers["To"] = t.String()
+	// headers["To"] = t.String()
 	headers["Subject"] = subject
 
 	// Setup message
@@ -30,6 +35,7 @@ func buildMessage(from, to, subject, body string, isHtml bool) string {
 	for k, v := range headers {
 		message += fmt.Sprintf("%s: %s\r\n", k, v)
 	}
+	message += recipientsMsg
 	if isHtml {
 		message += HTML_MIME
 	}
@@ -37,7 +43,7 @@ func buildMessage(from, to, subject, body string, isHtml bool) string {
 	return message
 }
 
-// EmailAgent TODO
+// EmailAgent
 // 2019/09/23 22:00:36
 type EmailAgent struct {
 	Host     string
@@ -47,7 +53,7 @@ type EmailAgent struct {
 	Client   *smtp.Client
 }
 
-//NewEmailAgent TODO
+// NewEmailAgent
 func NewEmailAgent(host string, port int, user, password string) (*EmailAgent, error) {
 	agent := &EmailAgent{
 		Host:     host,
@@ -63,7 +69,7 @@ func NewEmailAgent(host string, port int, user, password string) (*EmailAgent, e
 	return agent, nil
 }
 
-//init TODO
+// init
 func (a *EmailAgent) init() error {
 	auth := smtp.PlainAuth("", a.User, a.Password, a.Host)
 	tlsConfig := &tls.Config{
@@ -71,13 +77,11 @@ func (a *EmailAgent) init() error {
 		// InsecureSkipVerify: true,
 	}
 
-	log.Infof("Dial %s:%d...", a.Host, a.Port)
 	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", a.Host, a.Port), tlsConfig)
 	if err != nil {
 		log.Errorf("Dial error: %v", err)
 		return err
 	}
-	log.Infof("Dial OK.")
 
 	c, err := smtp.NewClient(conn, a.Host)
 	if err != nil {
@@ -85,51 +89,45 @@ func (a *EmailAgent) init() error {
 		return err
 	}
 
-	log.Infof("Auth ...")
 	if err = c.Auth(auth); err != nil {
 		log.Errorf("Auth error: %v", err)
 		return err
 	}
 
-	log.Infof("Auth OK.")
 	a.Client = c
 
 	return nil
 }
 
-// SendEmail TODO
-// 2019/09/23 22:09:58
-func (a *EmailAgent) SendEmail(to, subject, body string) error {
+
+// SendEmail
+func (a *EmailAgent) SendEmail(recipients []string, subject, body string, isHtml bool) error {
 	if a.Client == nil {
 		msg := fmt.Sprintf("EmailAgent must init!")
-		err := fmt.Errorf(msg)
 		log.Errorf(msg)
+		err := fmt.Errorf(msg)
 		return err
 	}
-	log.Infof("Mail ...")
 	if err := a.Client.Mail(a.User); err != nil {
 		log.Errorf("Mail error: %v", err)
 		return err
 	}
-	log.Infof("Mail OK.")
 
-	log.Infof("Rctp ...")
-	if err := a.Client.Rcpt(to); err != nil {
-		log.Errorf("Rcpt error: %v", err)
-		return err
+	for _, recipient := range recipients {
+		if err := a.Client.Rcpt(recipient); err != nil {
+			log.Errorf("Rcpt error: %v", err)
+			return err
+		}
 	}
-	log.Infof("Rctp OK.")
 
-	log.Infof("Data ...")
 	w, err := a.Client.Data()
 	if err != nil {
 		log.Errorf("Data error: %v", err)
 		return err
 	}
 	defer w.Close()
-	log.Infof("Data OK.")
 
-	message := buildMessage(a.User, to, subject, body, false)
+	message := buildMessage(recipients, a.User, subject, body, isHtml)
 	_, err = w.Write([]byte(message))
 	if err != nil {
 		log.Errorf("Write error: %v", err)
@@ -138,46 +136,7 @@ func (a *EmailAgent) SendEmail(to, subject, body string) error {
 	return nil
 }
 
-func (a *EmailAgent) SendHTMLEmail(to, subject, body string) error {
-	if a.Client == nil {
-		msg := fmt.Sprintf("EmailAgent must init!")
-		err := fmt.Errorf(msg)
-		log.Errorf(msg)
-		return err
-	}
-	log.Infof("Mail ...")
-	if err := a.Client.Mail(a.User); err != nil {
-		log.Errorf("Mail error: %v", err)
-		return err
-	}
-	log.Infof("Mail OK.")
-
-	log.Infof("Rctp ...")
-	if err := a.Client.Rcpt(to); err != nil {
-		log.Errorf("Rcpt error: %v", err)
-		return err
-	}
-	log.Infof("Rctp OK.")
-
-	log.Infof("Data ...")
-	w, err := a.Client.Data()
-	if err != nil {
-		log.Errorf("Data error: %v", err)
-		return err
-	}
-	defer w.Close()
-	log.Infof("Data OK.")
-
-	message := buildMessage(a.User, to, subject, body, true)
-	_, err = w.Write([]byte(message))
-	if err != nil {
-		log.Errorf("Write error: %v", err)
-		return err
-	}
-	return nil
-}
-
-// Close TODO
+// Close
 // 2019/09/23 22:17:53
 func (a *EmailAgent) Close() error {
 	if a.Client == nil {
