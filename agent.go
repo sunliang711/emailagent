@@ -99,6 +99,45 @@ func (a *EmailAgent) init() error {
 	return nil
 }
 
+func (a *EmailAgent) Send(msg *Message, isHTML bool) error {
+	data, err := msg.Build(isHTML)
+	if err != nil {
+		return err
+	}
+
+	if a.Client == nil {
+		msg := fmt.Sprintf("EmailAgent must init!")
+		log.Errorf(msg)
+		err := fmt.Errorf(msg)
+		return err
+	}
+	if err := a.Client.Mail(a.User); err != nil {
+		log.Errorf("Mail error: %v", err)
+		return err
+	}
+
+	for _, recipient := range msg.To {
+		if err := a.Client.Rcpt(recipient); err != nil {
+			log.Errorf("Rcpt error: %v", err)
+			return err
+		}
+	}
+
+	w, err := a.Client.Data()
+	if err != nil {
+		log.Errorf("Data error: %v", err)
+		return err
+	}
+	defer w.Close()
+
+	_, err = w.Write([]byte(data))
+	if err != nil {
+		log.Errorf("Write error: %v", err)
+		return err
+	}
+	return nil
+
+}
 
 // SendEmail
 func (a *EmailAgent) SendEmail(recipients []string, subject, body string, isHtml bool) error {
